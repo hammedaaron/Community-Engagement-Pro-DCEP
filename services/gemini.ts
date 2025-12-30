@@ -1,7 +1,13 @@
+
 import { GoogleGenAI } from "@google/genai";
 
-// Fix: Strictly following the SDK initialization guideline: use process.env.API_KEY directly.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Use a getter to handle potential late-binding of the process polyfill
+const getApiKey = () => {
+  const win = window as any;
+  return win.process?.env?.API_KEY || (typeof process !== 'undefined' ? process.env.API_KEY : "");
+};
+
+const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
 export async function suggestFolders(currentFolders: string[]) {
   try {
@@ -9,7 +15,6 @@ export async function suggestFolders(currentFolders: string[]) {
       model: 'gemini-3-flash-preview',
       contents: `Based on these existing folders: ${currentFolders.join(', ')}, suggest 3 new relevant social platforms or communities for a "follow-for-follow" app. Return only comma-separated values.`,
     });
-    // Safely handle potential undefined text
     return response.text?.split(',')?.map(s => s.trim()) || [];
   } catch (error) {
     console.error("Gemini Suggestion Error:", error);

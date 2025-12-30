@@ -8,11 +8,13 @@ const getEnv = (key: string, defaultValue: string) => {
   return val;
 };
 
-const supabaseUrl = getEnv('SUPABASE_URL', 'https://mwdewgcaculysfhpbzaf.supabase.co');
-const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY', 'sb_publishable_AuDbk4dokgLK806pyAmAYg_BrB3HUe1');
+// Sync with the URL/Key provided in index.html to ensure connection to the correct DB instance
+const supabaseUrl = getEnv('SUPABASE_URL', 'https://aoecvxqyrmegjhvegjqd.supabase.co');
+const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY', 'sb_publishable_iYWbACp3rr7UuqSmbjpPPw_eMMyMmFG');
 
-// Debug log to ensure client initialization parameters are correct
-console.log(`[Supabase Init] URL: ${supabaseUrl.substring(0, 15)}... Key: ${supabaseAnonKey.substring(0, 15)}...`);
+// Debug log with safety checks
+const safeSub = (str: string, len: number) => (str && str.length >= len) ? str.substring(0, len) : 'invalid';
+console.log(`[Supabase Init] URL: ${safeSub(supabaseUrl, 15)}... Key: ${safeSub(supabaseAnonKey, 15)}...`);
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
