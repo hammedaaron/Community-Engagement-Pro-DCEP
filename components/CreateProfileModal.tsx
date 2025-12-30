@@ -21,37 +21,31 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({ onClose, onSubm
   const [isOptimizing, setIsOptimizing] = useState(false);
   const isDark = theme === 'dark';
 
-  const currentFolder = folders.find(f => f.id === selectedFolderId);
-  const targetPartyId = currentFolder?.party_id === SYSTEM_PARTY_ID ? SYSTEM_PARTY_ID : (activeParty?.id || SYSTEM_PARTY_ID);
-
-  const alreadyHasProfileInFolder = cards.some(c => c.user_id === currentUser?.id && c.folder_id === selectedFolderId);
   const isDev = currentUser?.role === UserRole.DEV;
   const isAdmin = currentUser?.role === UserRole.ADMIN;
   
   const now = Date.now();
   const DAY_MS = 24 * 60 * 60 * 1000;
   
-  // Rate limits are specific to the community/party_id
-  const userRecentCardsInCommunity = cards.filter(c => 
+  // Requirement: Rules are specific to each community POD (Folder) created by the admin.
+  // We check how many cards this specific user has created in THIS folder within the last 24h.
+  const userRecentCardsInFolder = cards.filter(c => 
     c.user_id === currentUser?.id && 
-    c.party_id === targetPartyId && 
+    c.folder_id === selectedFolderId && 
     c.timestamp > now - DAY_MS
   );
   
-  const reachedFolderLimit = alreadyHasProfileInFolder && !isDev && !isAdmin;
+  // Admin: 2 cards per 24h per community.
+  // Regular: 1 card per 24h per community.
   const reachedRateLimit = !isDev && (
-    (isAdmin && userRecentCardsInCommunity.length >= 2) || 
-    (!isAdmin && userRecentCardsInCommunity.length >= 1)
+    (isAdmin && userRecentCardsInFolder.length >= 2) || 
+    (!isAdmin && userRecentCardsInFolder.length >= 1)
   );
 
   const handlePost = () => {
-    if (reachedFolderLimit) {
-      showToast("Profile exists already in this folder.", "error");
-      return;
-    }
     if (reachedRateLimit) {
-      const limitText = isAdmin ? "2 posts" : "1 post";
-      showToast(`Community Rate Limit: Max ${limitText} per 24 hours.`, "error");
+      const limitText = isAdmin ? "2 cards" : "1 card";
+      showToast(`Limit reached: Max ${limitText} per 24 hours in this community.`, "error");
       return;
     }
 
@@ -92,16 +86,16 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({ onClose, onSubm
         </div>
         
         <div className="px-10 pb-10 space-y-8 overflow-y-auto max-h-[70vh] custom-scrollbar">
-          {(reachedFolderLimit || reachedRateLimit) ? (
+          {reachedRateLimit ? (
             <div className={`p-8 rounded-[2rem] border text-center space-y-4 ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-100'}`}>
               <div className="w-16 h-16 bg-amber-500 rounded-2xl flex items-center justify-center text-white mx-auto shadow-lg shadow-amber-500/20">
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
               </div>
               <p className="text-sm font-black text-slate-500 uppercase tracking-widest">
-                {reachedFolderLimit ? 'Folder Limit Reached' : '24-Hour Community Limit Reached'}
+                24-Hour Limit Reached
               </p>
               <p className="text-xs font-medium text-slate-400">
-                {isAdmin ? 'Admins: Max 2 nodes per 24h per community.' : 'Regular: Max 1 node per 24h per community.'}
+                {isAdmin ? 'Admins: Max 2 profile cards per 24h in this specific community.' : 'Regular members: Max 1 profile card per 24h in this specific community.'}
               </p>
             </div>
           ) : (
@@ -139,7 +133,7 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({ onClose, onSubm
 
           <div className="flex flex-col sm:flex-row gap-4 pt-4">
             <button onClick={onClose} className={`flex-1 py-5 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${isDark ? 'hover:bg-slate-800 text-slate-500' : 'hover:bg-slate-100 text-slate-500'}`}>Cancel</button>
-            {(!reachedFolderLimit && !reachedRateLimit) && (
+            {!reachedRateLimit && (
               <button onClick={handlePost} disabled={!name.trim() || !link1.trim() || isOptimizing} className="flex-1 py-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-2xl shadow-indigo-500/30 transition-all text-sm uppercase tracking-widest disabled:opacity-30">
                 Join Feed
               </button>
