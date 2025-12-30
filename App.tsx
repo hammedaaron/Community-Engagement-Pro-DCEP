@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, createContext, useContext, useRef } from 'react';
 import { User, UserRole, Folder, Card, Follow, AppNotification, NotificationType, Party, InstructionBox } from './types';
-import { getSession, saveSession, findParty, getPartyData, markRead, deleteCard as dbDeleteCard, upsertCard, upsertFollow, addNotification, SYSTEM_PARTY_ID } from './db';
+import { getSession, saveSession, findParty, getPartyData, markRead, deleteCard as dbDeleteCard, upsertCard, upsertFollow, addNotification, SYSTEM_PARTY_ID, isCardExpired } from './db';
 import { supabase } from './supabase';
 import Layout from './components/Layout';
 import CardGrid from './components/CardGrid';
@@ -84,10 +84,14 @@ const App: React.FC = () => {
     const pid = currentUser?.party_id || SYSTEM_PARTY_ID;
     try {
       const party = await findParty(pid);
-      if (party) setActiveParty(party);
+      setActiveParty(party);
       const data = await getPartyData(pid);
+      
       setFolders(data.folders);
-      setCards(data.cards);
+      // Visibility rule: Filter out cards whose expiry boundary has passed based on party timezone
+      const visibleCards = data.cards.filter(c => !isCardExpired(c, party));
+      setCards(visibleCards);
+      
       setFollows(data.follows);
       setNotifications(data.notifications);
       setInstructions(data.instructions);
@@ -122,6 +126,7 @@ const App: React.FC = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cards', filter: `party_id=eq.${pid}` }, () => throttledSync())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'folders', filter: `party_id=eq.${pid}` }, () => throttledSync())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'instructions', filter: `party_id=eq.${pid}` }, () => throttledSync())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'parties', filter: `id=eq.${pid}` }, () => throttledSync())
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') setSocketStatus('connected');
         else if (status === 'CLOSED') setSocketStatus('disconnected');
@@ -271,11 +276,7 @@ const App: React.FC = () => {
             showToast("Restricted folder.", "error");
             return;
           }
-          const alreadyHasProfile = cards.some(c => c.user_id === currentUser.id && c.folder_id === selectedFolderId);
-          if (alreadyHasProfile && currentUser.role === UserRole.REGULAR) {
-            showToast("Profile exists.", "error");
-            return;
-          }
+          
           const newCard: Card = { 
             id: Math.random().toString(36).substr(2, 9), 
             user_id: currentUser.id, 

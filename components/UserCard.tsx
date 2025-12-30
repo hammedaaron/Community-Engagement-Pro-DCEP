@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Card, UserRole } from '../types';
 import { useApp } from '../App';
-import { updateCardPin } from '../db';
+import { updateCardPin, getCalendarDaysBetween } from '../db';
 
 interface UserCardProps {
   card: Card;
@@ -50,23 +50,29 @@ const UserCard: React.FC<UserCardProps> = ({ card, onEdit }) => {
     const targetPinState = !card.is_pinned;
     
     try {
-      // Partial update specifically for pinning
       await updateCardPin(card.id, targetPinState);
       showToast(targetPinState ? "Node Pinned to Priority Hub" : "Priority Removed");
     } catch (err: any) {
-      // Display specific database error message
       const errorMessage = err?.message || "Pinning operation failed.";
       showToast(`DB Error: ${errorMessage}`, "error");
-      console.error("Pin Toggle Error:", err);
     } finally {
       setIsPinning(false);
     }
   };
 
+  const tz = activeParty?.timezone || 'UTC';
   const now = Date.now();
-  const CARD_EXPIRY_MS = 48 * 60 * 60 * 1000;
-  const timeLeftMs = Math.max(0, (card.timestamp + CARD_EXPIRY_MS) - now);
-  const hoursLeft = Math.floor(timeLeftMs / (1000 * 60 * 60));
+
+  // Status calculation for Stability Matrix (Calendar Day Logic)
+  const stabilityStatus = useMemo(() => {
+    if (card.is_permanent) return '∞ PERMANENT';
+    
+    const daysPassed = getCalendarDaysBetween(card.timestamp, now, tz);
+    
+    if (daysPassed === 0) return 'STABLE (EXPIRES TOMORROW)';
+    if (daysPassed === 1) return 'EXPIRING AT 23:59:59';
+    return 'EXPIRED';
+  }, [card.is_permanent, card.timestamp, now, tz]);
 
   const hasLink2 = !!card.external_link2 && card.external_link2.trim().length > 0;
   const allLinksVisited = visited1 && (!hasLink2 || visited2);
@@ -111,7 +117,6 @@ const UserCard: React.FC<UserCardProps> = ({ card, onEdit }) => {
     }
   };
   
-  // Visual Styles for Pinned cards (Priority Access)
   const isPinned = card.is_pinned;
   const baseClasses = `relative rounded-[2.5rem] p-6 transition-all duration-500 flex flex-col h-full border z-10 overflow-hidden`;
   const themeClasses = isPoweredUp ? 'glass-card shimmer' : isDark ? 'bg-slate-900' : 'bg-white shadow-sm';
@@ -192,9 +197,9 @@ const UserCard: React.FC<UserCardProps> = ({ card, onEdit }) => {
         </div>
 
         <div className="mb-5 flex items-center justify-between px-2">
-           <span className="text-[7px] font-black uppercase tracking-widest text-slate-500">Stability Matrix</span>
-           <span className={`text-[7px] font-black uppercase tracking-widest flex items-center gap-1 ${hoursLeft < 12 && !card.is_permanent ? 'text-red-500' : 'text-emerald-500'}`}>
-             {card.is_permanent ? '∞ PERMANENT' : `${hoursLeft}H REMAINING`}
+           <span className="text-[7px] font-black uppercase tracking-widest text-slate-500">Stability Matrix ({tz})</span>
+           <span className={`text-[7px] font-black uppercase tracking-widest flex items-center gap-1 ${stabilityStatus.includes('EXPIRING') ? 'text-orange-500' : stabilityStatus.includes('PERMANENT') ? 'text-indigo-500' : 'text-emerald-500'}`}>
+             {stabilityStatus}
            </span>
         </div>
 

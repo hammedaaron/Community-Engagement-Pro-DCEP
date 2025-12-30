@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useApp } from '../App';
 import { UserRole } from '../types';
 import { optimizeIdentity } from '../services/gemini';
-import { SYSTEM_PARTY_ID } from '../db';
+import { getInTimeZone, getCalendarDaysBetween } from '../db';
 
 interface CreateProfileModalProps {
   onClose: () => void;
@@ -24,28 +24,28 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({ onClose, onSubm
   const isDev = currentUser?.role === UserRole.DEV;
   const isAdmin = currentUser?.role === UserRole.ADMIN;
   
+  const tz = activeParty?.timezone || 'UTC';
   const now = Date.now();
-  const DAY_MS = 24 * 60 * 60 * 1000;
+  const todayStr = getInTimeZone(now, tz);
   
-  // Requirement: Rules are specific to each community POD (Folder) created by the admin.
-  // We check how many cards this specific user has created in THIS folder within the last 24h.
-  const userRecentCardsInFolder = cards.filter(c => 
+  // Rate limits are now specific to the strict CALENDAR DAY in the community timezone
+  const userTodayCardsInFolder = cards.filter(c => 
     c.user_id === currentUser?.id && 
     c.folder_id === selectedFolderId && 
-    c.timestamp > now - DAY_MS
+    getCalendarDaysBetween(c.timestamp, now, tz) === 0
   );
   
-  // Admin: 2 cards per 24h per community.
-  // Regular: 1 card per 24h per community.
+  // Admin: 2 cards per CALENDAR DAY per community.
+  // Regular: 1 card per CALENDAR DAY per community.
   const reachedRateLimit = !isDev && (
-    (isAdmin && userRecentCardsInFolder.length >= 2) || 
-    (!isAdmin && userRecentCardsInFolder.length >= 1)
+    (isAdmin && userTodayCardsInFolder.length >= 2) || 
+    (!isAdmin && userTodayCardsInFolder.length >= 1)
   );
 
   const handlePost = () => {
     if (reachedRateLimit) {
       const limitText = isAdmin ? "2 cards" : "1 card";
-      showToast(`Limit reached: Max ${limitText} per 24 hours in this community.`, "error");
+      showToast(`Daily limit reached: Max ${limitText} per calendar day in this community.`, "error");
       return;
     }
 
@@ -79,7 +79,10 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({ onClose, onSubm
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300">
       <div className={`w-full max-w-lg overflow-hidden transform transition-all rounded-t-[3rem] sm:rounded-[3rem] shadow-2xl animate-in slide-in-from-bottom-full duration-500 ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-white border border-slate-100'}`}>
         <div className="px-10 py-8 flex items-center justify-between">
-          <h3 className={`font-black text-2xl tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>Join Community</h3>
+          <div className="flex flex-col">
+            <h3 className={`font-black text-2xl tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>Join Community</h3>
+            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">Calendar Day: {todayStr} ({tz})</p>
+          </div>
           <button onClick={onClose} className={`p-3 rounded-2xl transition-all ${isDark ? 'hover:bg-slate-800 text-slate-500' : 'hover:bg-slate-100 text-slate-400'}`}>
             <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
@@ -92,11 +95,12 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({ onClose, onSubm
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
               </div>
               <p className="text-sm font-black text-slate-500 uppercase tracking-widest">
-                24-Hour Limit Reached
+                Daily Limit Reached
               </p>
               <p className="text-xs font-medium text-slate-400">
-                {isAdmin ? 'Admins: Max 2 profile cards per 24h in this specific community.' : 'Regular members: Max 1 profile card per 24h in this specific community.'}
+                {isAdmin ? 'Admins: Max 2 profile cards per calendar day in this specific community.' : 'Regular members: Max 1 profile card per calendar day in this specific community.'}
               </p>
+              <p className="text-[10px] font-black text-indigo-500 uppercase tracking-tighter">Resets at midnight in {tz} timezone.</p>
             </div>
           ) : (
             <div className="space-y-6">

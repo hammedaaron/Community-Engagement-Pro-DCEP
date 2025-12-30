@@ -19,13 +19,22 @@ const AuthorityTable: React.FC = () => {
 
   const isDark = theme === 'dark';
 
-  const sqlScript = `-- Run this in your Supabase SQL Editor to fix 'is_pinned' errors:
+  const sqlScript = `-- Run this in your Supabase SQL Editor to fix schema errors:
+
+-- Fix Parties Table
+ALTER TABLE parties 
+ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'UTC';
+
+-- Fix Cards Table
 ALTER TABLE cards 
 ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE,
 ADD COLUMN IF NOT EXISTS is_permanent BOOLEAN DEFAULT FALSE,
 ADD COLUMN IF NOT EXISTS link1_label TEXT,
 ADD COLUMN IF NOT EXISTS link2_label TEXT,
-ADD COLUMN IF NOT EXISTS external_link2 TEXT;`;
+ADD COLUMN IF NOT EXISTS external_link2 TEXT;
+
+-- Refresh schema cache
+NOTIFY pgrst, 'reload schema';`;
 
   const copySql = () => {
     navigator.clipboard.writeText(sqlScript);
@@ -39,7 +48,7 @@ ADD COLUMN IF NOT EXISTS external_link2 TEXT;`;
       setData(res);
     } catch (err) {
       console.error("Data Refresh Error:", err);
-      showToast("Sync Error: Authority data could not be fully loaded.", "error");
+      showToast("Sync Error: Authority data could not be fully loaded. Did you run the SQL script?", "error");
     } finally {
       setLoading(false);
     }
@@ -173,7 +182,7 @@ ADD COLUMN IF NOT EXISTS external_link2 TEXT;`;
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-xl font-black text-white uppercase tracking-tighter">Database Sync Required</h3>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Run this SQL in your Supabase Editor to support 'is_pinned' and other features.</p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Run this SQL in your Supabase Editor to support 'timezone' and other features.</p>
             </div>
             <button onClick={copySql} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-indigo-600/20 transition-all active:scale-95">
               Copy SQL Script
@@ -229,7 +238,7 @@ ADD COLUMN IF NOT EXISTS external_link2 TEXT;`;
                     </td>
                     <td className="p-6">
                       <div className="font-black text-white text-base truncate max-w-[150px]">{p.name}</div>
-                      <div className="text-[9px] text-slate-500 uppercase font-bold mt-1">Resource Managed</div>
+                      <div className="text-[9px] text-slate-500 uppercase font-bold mt-1">{p.timezone || 'UTC'} Boundary</div>
                     </td>
                     <td className="p-6 text-right">
                       {p.id !== SYSTEM_PARTY_ID ? (

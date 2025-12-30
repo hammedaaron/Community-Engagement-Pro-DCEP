@@ -4,7 +4,65 @@ import { supabase } from './supabase';
 
 const SESSION_KEY = 'connector_pro_v3_session';
 export const SYSTEM_PARTY_ID = 'SYSTEM';
-export const CARD_EXPIRY_MS = 48 * 60 * 60 * 1000;
+
+// Timezone Utilities
+export const isValidTimeZone = (tz: string): boolean => {
+  if (!tz) return false;
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: tz });
+    return true;
+  } catch (ex) {
+    return false;
+  }
+};
+
+/**
+ * Returns the calendar day difference between two timestamps within a specific timezone.
+ * 0 = Same calendar day
+ * 1 = Consecutive calendar day
+ */
+export const getCalendarDaysBetween = (start: number, end: number, tz: string = 'UTC'): number => {
+  const safeTz = isValidTimeZone(tz) ? tz : 'UTC';
+  const fmt = new Intl.DateTimeFormat('en-US', { 
+    timeZone: safeTz, 
+    year: 'numeric', 
+    month: 'numeric', 
+    day: 'numeric' 
+  });
+  
+  const startParts = fmt.formatToParts(new Date(start));
+  const endParts = fmt.formatToParts(new Date(end));
+  
+  const getVal = (parts: Intl.DateTimeFormatPart[], type: string) => parts.find(p => p.type === type)?.value;
+  
+  // Create comparable dates representing midnight of those calendar days in the local environment
+  // format: YYYY-MM-DD
+  const dS = new Date(`${getVal(startParts, 'year')}-${getVal(startParts, 'month')?.padStart(2, '0')}-${getVal(startParts, 'day')?.padStart(2, '0')}T00:00:00`);
+  const dE = new Date(`${getVal(endParts, 'year')}-${getVal(endParts, 'month')?.padStart(2, '0')}-${getVal(endParts, 'day')?.padStart(2, '0')}T00:00:00`);
+  
+  const diffMs = dE.getTime() - dS.getTime();
+  return Math.round(diffMs / (1000 * 60 * 60 * 24));
+};
+
+export const getInTimeZone = (timestamp: number, timezone: string = 'UTC') => {
+  const safeTz = isValidTimeZone(timezone) ? timezone : 'UTC';
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: safeTz,
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date(timestamp));
+};
+
+/**
+ * Expiry Rule:
+ * Created on Day D expires at 23:59:59 of Day D+1.
+ * Visible if Difference in Calendar Days <= 1.
+ */
+export const isCardExpired = (card: Card, party: Party | null) => {
+  if (card.is_permanent) return false;
+  const tz = party?.timezone || 'UTC';
+  const daysPassed = getCalendarDaysBetween(card.timestamp, Date.now(), tz);
+  return daysPassed > 1;
+};
 
 export const saveSession = (user: User | null) => {
   if (user) {
@@ -23,7 +81,7 @@ export const ensureDevUser = async () => {
   try {
     const { data: party, error: pError } = await supabase.from('parties').select('id').eq('id', SYSTEM_PARTY_ID).single();
     if (!party && (!pError || pError.code === 'PGRST116')) {
-      await supabase.from('parties').insert([{ id: SYSTEM_PARTY_ID, name: 'System Core' }]);
+      await supabase.from('parties').insert([{ id: SYSTEM_PARTY_ID, name: 'System Core', timezone: 'UTC' }]);
     }
 
     const devId = 'dev-master-root';
@@ -108,7 +166,7 @@ export const findPartyByName = async (name: string): Promise<Party | null> => {
 };
 
 export const findParty = async (partyId: string): Promise<Party | null> => {
-  if (partyId === SYSTEM_PARTY_ID) return { id: SYSTEM_PARTY_ID, name: 'System Core' };
+  if (partyId === SYSTEM_PARTY_ID) return { id: SYSTEM_PARTY_ID, name: 'System Core', timezone: 'UTC' };
   try {
     const { data, error } = await supabase.from('parties').select('*').eq('id', partyId).single();
     if (error && error.code !== 'PGRST116') throw error;
@@ -118,17 +176,23 @@ export const findParty = async (partyId: string): Promise<Party | null> => {
   }
 };
 
-export const getPartyData = async (partyId: string) => {
-  const now = Date.now();
-  const expiryThreshold = now - CARD_EXPIRY_MS;
+export const updatePartyTimezone = async (partyId: string, timezone: string) => {
+  if (!isValidTimeZone(timezone)) throw new Error("Invalid IANA Timezone provided.");
+  try {
+    const { error } = await supabase.from('parties').update({ timezone }).eq('id', partyId);
+    if (error) throw error;
+  } catch (err: any) {
+    throw new Error(err.message || "Timezone update failed.");
+  }
+};
 
+export const getPartyData = async (partyId: string) => {
   try {
     const [foldersRes, cardsRes, followsRes, notificationsRes, instructionsRes] = await Promise.all([
       supabase.from('folders').select('*').or(`party_id.eq.${partyId},party_id.eq.${SYSTEM_PARTY_ID}`).order('name'),
       supabase.from('cards')
         .select('*')
         .or(`party_id.eq.${partyId},party_id.eq.${SYSTEM_PARTY_ID}`)
-        .or(`is_permanent.eq.true,timestamp.gt.${expiryThreshold}`)
         .order('timestamp', { ascending: false }),
       supabase.from('follows').select('*').eq('party_id', partyId),
       supabase.from('notifications').select('*').eq('party_id', partyId).order('timestamp', { ascending: false }),
@@ -226,15 +290,17 @@ export const validateDevPassword = (password: string) => {
   return !!match;
 };
 
-export const registerParty = async (partyName: string, adminPassword: string) => {
+export const registerParty = async (partyName: string, adminPassword: string, timezone: string = 'UTC') => {
   const info = validateAdminPassword(adminPassword);
   if (!info) throw new Error("Invalid password format.");
+  if (!isValidTimeZone(timezone)) throw new Error("Invalid IANA Timezone.");
+
   const existing = await findPartyByName(partyName);
   if (existing) throw new Error(`Community name taken.`);
   const existingId = await findParty(info.partyId);
   if (existingId) throw new Error(`Code in use.`);
   
-  const newParty: Party = { id: info.partyId, name: partyName.trim() };
+  const newParty: Party = { id: info.partyId, name: partyName.trim(), timezone };
   const newAdmin: User = {
     id: `admin-${info.partyId}-${info.adminId}`,
     name: 'Admin',

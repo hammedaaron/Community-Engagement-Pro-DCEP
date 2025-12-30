@@ -1,10 +1,17 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { User, UserRole } from '../types';
 import { getParties, validateAdminPassword, validateDevPassword, registerParty, loginUser, registerUser, checkUserExists, findPartyByName, ensureDevUser } from '../db';
 import LandingPage from './LandingPage';
 import AdminDocs from './AdminDocs';
 import UserDocs from './UserDocs';
+
+// Helper to get all standard timezones
+const ALL_TIMEZONES = (Intl as any).supportedValuesOf ? (Intl as any).supportedValuesOf('timeZone') : [
+  'UTC', 'America/New_York', 'America/Los_Angeles', 'America/Chicago', 'America/Denver', 
+  'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo', 'Asia/Shanghai', 
+  'Asia/Dubai', 'Australia/Sydney', 'Pacific/Auckland'
+];
 
 interface GateProps {
   onAuth: (user: User) => void;
@@ -15,6 +22,7 @@ const Gate: React.FC<GateProps> = ({ onAuth }) => {
   const [partyName, setPartyName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const [error, setError] = useState('');
   const [dbParties, setDbParties] = useState<{id: string, name: string}[]>([]);
   const [showAdminDocs, setShowAdminDocs] = useState(false);
@@ -45,7 +53,7 @@ const Gate: React.FC<GateProps> = ({ onAuth }) => {
     setError('');
     try {
       if (username !== 'Admin') throw new Error("Admin username must be 'Admin'.");
-      await registerParty(partyName, password);
+      await registerParty(partyName, password, timezone);
       setMode('success');
       const parties = await getParties();
       setDbParties(parties);
@@ -95,7 +103,6 @@ const Gate: React.FC<GateProps> = ({ onAuth }) => {
         if (adminInfo && cleanUsername === 'Admin') {
           if (adminInfo.partyId === activeParty.id) {
             const adminId = `admin-${adminInfo.partyId}-${adminInfo.adminId}`;
-            // Fix: property names in User object to match types.ts
             const newAdmin: User = {
               id: adminId,
               name: 'Admin',
@@ -123,7 +130,6 @@ const Gate: React.FC<GateProps> = ({ onAuth }) => {
         if (exists) {
           setError("Invalid credentials.");
         } else {
-          // Fix: property names in User object to match types.ts
           const newUser: User = {
             id: Math.random().toString(36).substr(2, 9),
             name: cleanUsername,
@@ -141,7 +147,7 @@ const Gate: React.FC<GateProps> = ({ onAuth }) => {
   };
 
   const takenIds = dbParties.map(p => p.id);
-  const availableCount = 89 - takenIds.length; // Range 11-99 is 89 numbers
+  const availableCount = 89 - takenIds.length;
 
   return (
     <div className="fixed inset-0 z-[200] bg-slate-950 overflow-y-auto custom-scrollbar">
@@ -228,7 +234,7 @@ const Gate: React.FC<GateProps> = ({ onAuth }) => {
                       <div className="p-5 bg-slate-950/50 rounded-2xl border border-slate-800 text-[11px] font-medium text-slate-400 leading-relaxed space-y-2 animate-in fade-in zoom-in-95">
                         <p>1. Set your <strong className="text-white">Username</strong> to exactly <code className="text-indigo-400 font-bold">Admin</code>.</p>
                         <p>2. Set a <strong className="text-white">Password</strong> following the <code className="text-indigo-400 font-bold">Hamstar[XX][Y]</code> rule.</p>
-                        <p>3. This creates a secure, verifiable community key.</p>
+                        <p>3. <strong className="text-white">Authoritative Timezone</strong>: All calendar rules derive from this setting.</p>
                       </div>
                     )}
 
@@ -286,6 +292,24 @@ const Gate: React.FC<GateProps> = ({ onAuth }) => {
                     </div>
                   </div>
 
+                  {mode === 'admin-signup' && (
+                    <div className="space-y-1 animate-in slide-in-from-top-2 duration-300">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2">Authoritative Timezone</label>
+                      <div className="relative group">
+                        <select 
+                          value={timezone} 
+                          onChange={e => setTimezone(e.target.value)}
+                          className="w-full bg-slate-800 border-slate-700 text-white rounded-2xl px-6 py-4 font-bold focus:ring-2 focus:ring-indigo-500 outline-none border transition-all appearance-none cursor-pointer pr-12"
+                        >
+                          {ALL_TIMEZONES.map((tz: string) => (
+                            <option key={tz} value={tz} className="bg-slate-900 text-white font-bold">{tz}</option>
+                          ))}
+                        </select>
+                        <svg className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-hover:text-indigo-400 transition-colors pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M19 9l-7 7-7-7" /></svg>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2">Username</label>
@@ -321,9 +345,15 @@ const Gate: React.FC<GateProps> = ({ onAuth }) => {
                 
                 <div className="p-6 bg-slate-800/50 rounded-[2rem] border border-slate-700 space-y-4">
                   <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">Required Access Credentials</p>
-                  <div className="flex items-center justify-between bg-slate-950 px-5 py-3 rounded-xl border border-indigo-500/10">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Membership:</span>
-                    <span className="text-sm font-black text-indigo-400">{partyName}</span>
+                  <div className="flex flex-col gap-2 bg-slate-950 px-5 py-3 rounded-xl border border-indigo-500/10">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase">Membership:</span>
+                      <span className="text-sm font-black text-indigo-400">{partyName}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase">Timezone:</span>
+                      <span className="text-sm font-black text-emerald-400">{timezone}</span>
+                    </div>
                   </div>
                 </div>
 

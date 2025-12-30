@@ -8,6 +8,7 @@ export enum UserRole {
 export interface Party {
   id: string;
   name: string;
+  timezone?: string; // e.g., 'UTC', 'America/New_York', 'Asia/Tokyo'
 }
 
 export interface User {
