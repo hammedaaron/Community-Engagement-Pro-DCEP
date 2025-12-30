@@ -1,7 +1,7 @@
-
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: (window as any).process?.env?.API_KEY || "" });
+// Fix: Strictly following the SDK initialization guideline: use process.env.API_KEY directly.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export async function suggestFolders(currentFolders: string[]) {
   try {

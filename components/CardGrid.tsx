@@ -19,14 +19,10 @@ const CardGrid: React.FC<CardGridProps> = ({ folderId, onEditCard }) => {
     const folder = folders.find(f => f.id === folderId);
     let rawCards = cards.filter(c => c.folder_id === folderId);
 
-    // RULE: The developer cannot see the admin's user card or the users' user cards
-    // but the admin and users can see the developer's user card.
     if (currentUser?.role === UserRole.DEV) {
-      // Dev only sees cards where they are the creator, OR other Dev-level cards
       rawCards = rawCards.filter(c => c.creator_role === UserRole.DEV || c.user_id === currentUser.id);
     }
 
-    // Universal folder strictly shows Dev infrastructure
     if (folder?.party_id === SYSTEM_PARTY_ID) {
       return rawCards.filter(c => c.creator_role === UserRole.DEV);
     }
@@ -39,19 +35,27 @@ const CardGrid: React.FC<CardGridProps> = ({ folderId, onEditCard }) => {
     return instructions.filter(i => i.folder_id === folderId);
   }, [instructions, folderId]);
 
-  const filteredCards = useMemo(() => {
+  const { pinnedCards, regularCards } = useMemo(() => {
     const filtered = folderCards.filter(c => 
       c.display_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
       c.external_link.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    return [...filtered].sort((a, b) => {
+    const sorted = [...filtered].sort((a, b) => {
+      // User's own card next
       const isAOwn = a.user_id === currentUser?.id;
       const isBOwn = b.user_id === currentUser?.id;
       if (isAOwn && !isBOwn) return -1;
       if (!isAOwn && isBOwn) return 1;
+
+      // Newest timestamp last
       return b.timestamp - a.timestamp;
     });
+
+    return {
+      pinnedCards: sorted.filter(c => c.is_pinned),
+      regularCards: sorted.filter(c => !c.is_pinned)
+    };
   }, [folderCards, searchQuery, currentUser?.id]);
 
   const renderInstructionContent = (text: any) => {
@@ -115,20 +119,47 @@ const CardGrid: React.FC<CardGridProps> = ({ folderId, onEditCard }) => {
         </div>
       )}
 
-      {/* Profile Grid - Always Side-by-Side */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-8 lg:gap-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        {filteredCards.length > 0 ? (
-          filteredCards.map(card => (
-            <UserCard key={card.id} card={card} onEdit={() => onEditCard(card)} />
-          ))
-        ) : (
-          <div className="col-span-full py-20 text-center">
-             <div className="inline-flex p-6 rounded-full bg-slate-100 dark:bg-slate-800 mb-4">
-                <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-             </div>
-             <p className="text-slate-500 font-bold">No profiles established in this community yet.</p>
+      {/* Priority Section */}
+      {pinnedCards.length > 0 && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-4 px-2">
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent" />
+            <h4 className="text-[10px] font-black uppercase tracking-[0.4em] text-indigo-500 flex items-center gap-2">
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+              Priority Nodes
+            </h4>
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-8 lg:gap-10">
+            {pinnedCards.map(card => (
+              <UserCard key={card.id} card={card} onEdit={() => onEditCard(card)} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Profile Grid */}
+      <div className="space-y-6">
+        {(pinnedCards.length > 0 && regularCards.length > 0) && (
+           <div className="flex items-center gap-4 px-2">
+            <h4 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500">Active Feed</h4>
+            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
           </div>
         )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-8 lg:gap-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {regularCards.length > 0 ? (
+            regularCards.map(card => (
+              <UserCard key={card.id} card={card} onEdit={() => onEditCard(card)} />
+            ))
+          ) : pinnedCards.length === 0 ? (
+            <div className="col-span-full py-20 text-center">
+              <div className="inline-flex p-6 rounded-full bg-slate-100 dark:bg-slate-800 mb-4">
+                  <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+              </div>
+              <p className="text-slate-500 font-bold">No profiles established in this community yet.</p>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

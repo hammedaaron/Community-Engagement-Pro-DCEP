@@ -5,7 +5,7 @@ import { Party, User, Folder, Card } from '../types';
 import { useApp } from '../App';
 
 const AuthorityTable: React.FC = () => {
-  const { showToast, logout } = useApp();
+  const { showToast, logout, theme } = useApp();
   const [data, setData] = useState<{
     parties: Party[];
     users: User[];
@@ -15,6 +15,22 @@ const AuthorityTable: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [isPurging, setIsPurging] = useState(false);
+  const [showSqlHelper, setShowSqlHelper] = useState(false);
+
+  const isDark = theme === 'dark';
+
+  const sqlScript = `-- Run this in your Supabase SQL Editor to fix 'is_pinned' errors:
+ALTER TABLE cards 
+ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS is_permanent BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS link1_label TEXT,
+ADD COLUMN IF NOT EXISTS link2_label TEXT,
+ADD COLUMN IF NOT EXISTS external_link2 TEXT;`;
+
+  const copySql = () => {
+    navigator.clipboard.writeText(sqlScript);
+    showToast("SQL Script Copied to Clipboard");
+  };
 
   const refreshData = useCallback(async () => {
     setLoading(true);
@@ -66,7 +82,6 @@ const AuthorityTable: React.FC = () => {
       return;
     }
 
-    // Fix: access party_id instead of partyId to match User type
     const memberCount = data?.users.filter(u => u.party_id === party.id).length || 0;
     if (!window.confirm(`Dissolve community "${party.name}" (ID: ${party.id})?\n\nThis will expel all ${memberCount} members and clear all community nodes.`)) return;
 
@@ -90,7 +105,6 @@ const AuthorityTable: React.FC = () => {
       return;
     }
     
-    // Fix: access party_id instead of partyId to match User type
     if (!window.confirm(`Permanently expel member "${user.name}" from community ${user.party_id}?`)) return;
     
     try {
@@ -129,12 +143,19 @@ const AuthorityTable: React.FC = () => {
         
         <div className="flex flex-col sm:flex-row gap-4">
           <button 
+            onClick={() => setShowSqlHelper(!showSqlHelper)}
+            className={`px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 transition-all border-2 ${showSqlHelper ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-indigo-500'}`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
+            DB Sync Guide
+          </button>
+          <button 
             disabled={loading || isPurging}
             onClick={refreshData}
             className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 transition-all border border-slate-700"
           >
             <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-            {loading ? 'Syncing...' : 'Sync Data'}
+            Sync Data
           </button>
           <button 
             disabled={isPurging}
@@ -142,10 +163,27 @@ const AuthorityTable: React.FC = () => {
             className="bg-red-600 hover:bg-red-700 disabled:bg-red-900 text-white px-8 py-4 rounded-2xl font-black shadow-2xl shadow-red-500/30 text-xs uppercase tracking-widest flex items-center justify-center gap-3 transform transition-all active:scale-95 group"
           >
             <svg className={`w-5 h-5 ${isPurging ? 'animate-spin' : 'group-hover:animate-pulse'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-            {isPurging ? 'PURGING SYSTEM...' : 'Wipe Everything'}
+            {isPurging ? 'PURGING...' : 'Wipe System'}
           </button>
         </div>
       </header>
+
+      {showSqlHelper && (
+        <div className="p-8 rounded-[3rem] bg-indigo-600/10 border-2 border-indigo-500/30 animate-in slide-in-from-top-4 duration-500">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-xl font-black text-white uppercase tracking-tighter">Database Sync Required</h3>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Run this SQL in your Supabase Editor to support 'is_pinned' and other features.</p>
+            </div>
+            <button onClick={copySql} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-indigo-600/20 transition-all active:scale-95">
+              Copy SQL Script
+            </button>
+          </div>
+          <pre className={`p-6 rounded-2xl overflow-x-auto font-mono text-xs leading-relaxed ${isDark ? 'bg-slate-950 text-emerald-500' : 'bg-slate-800 text-emerald-400'}`}>
+            {sqlScript}
+          </pre>
+        </div>
+      )}
 
       {/* Resource Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
@@ -237,7 +275,6 @@ const AuthorityTable: React.FC = () => {
                   <tr key={u.id} className="group hover:bg-white/5 transition-all">
                     <td className="p-6">
                       <div className="font-black text-white text-base">{u.name}</div>
-                      {/* Fix: access party_id instead of partyId to match User type */}
                       <div className="text-[9px] text-slate-500 truncate max-w-[120px] font-mono">{u.party_id === SYSTEM_PARTY_ID ? 'SYSTEM' : `HUB ${u.party_id}`}</div>
                     </td>
                     <td className="p-6">

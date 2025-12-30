@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useApp } from '../App';
 import { UserRole } from '../types';
@@ -20,14 +19,16 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({ onClose, onSubm
   const [isOptimizing, setIsOptimizing] = useState(false);
   const isDark = theme === 'dark';
 
-  const alreadyHasProfile = cards.some(c => c.userId === currentUser?.id && c.folderId === selectedFolderId);
+  // Fix: changed userId to user_id and folderId to folder_id to match the Card interface defined in types.ts
+  const alreadyHasProfile = cards.some(c => c.user_id === currentUser?.id && c.folder_id === selectedFolderId);
   const isDev = currentUser?.role === UserRole.DEV;
   const isAdmin = currentUser?.role === UserRole.ADMIN;
   
   // Expiration & Rate Limit Check
   const now = Date.now();
   const DAY_MS = 24 * 60 * 60 * 1000;
-  const userRecentCards = cards.filter(c => c.userId === currentUser?.id && c.timestamp > now - DAY_MS);
+  // Fix: changed userId to user_id to match the Card interface defined in types.ts
+  const userRecentCards = cards.filter(c => c.user_id === currentUser?.id && c.timestamp > now - DAY_MS);
   
   const isEnforced = alreadyHasProfile && !isDev && !isAdmin;
   const reachedRateLimit = !isDev && (

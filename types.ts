@@ -39,6 +39,7 @@ export interface Card {
   link1_label?: string;
   link2_label?: string;
   is_permanent?: boolean;
+  is_pinned?: boolean;
   timestamp: number;
   x?: number;
   y?: number;

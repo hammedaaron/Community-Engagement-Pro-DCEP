@@ -184,6 +184,17 @@ export const upsertCard = async (card: Card, isUpdate: boolean = false) => {
   }
 };
 
+export const updateCardPin = async (cardId: string, isPinned: boolean) => {
+  try {
+    const { error } = await supabase.from('cards')
+      .update({ is_pinned: isPinned })
+      .eq('id', cardId);
+    if (error) throw error;
+  } catch (err: any) {
+    throw new Error(err.message || "Pin toggle failed.");
+  }
+};
+
 export const deleteCard = async (id: string) => {
   try {
     await supabase.from('cards').delete().eq('id', id);
