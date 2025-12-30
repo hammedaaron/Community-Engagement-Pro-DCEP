@@ -28,6 +28,7 @@ const UserCard: React.FC<UserCardProps> = ({ card, onEdit }) => {
   const isMutual = isFollowed && followsMe;
   const isDevOwned = card.creator_role === UserRole.DEV;
   const isAdminOwned = card.creator_role === UserRole.ADMIN;
+  const isAuthorityNode = isDevOwned || isAdminOwned;
 
   const canManage = useMemo(() => {
     if (isDev) return true;
@@ -170,15 +171,24 @@ const UserCard: React.FC<UserCardProps> = ({ card, onEdit }) => {
           </div>
         </div>
 
-        <div className={`grid grid-cols-2 gap-3 mb-5 p-3 rounded-2xl border transition-all ${isPinned ? 'bg-indigo-500/5 border-indigo-500/10' : isDark ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
-          <div className="text-center border-r border-slate-200 dark:border-slate-800">
-            <p className="text-sm font-black text-indigo-500">{stats.followers}</p>
-            <p className="text-[7px] font-black uppercase tracking-widest text-slate-500">Engaged By</p>
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-black text-indigo-500">{stats.following}</p>
-            <p className="text-[7px] font-black uppercase tracking-widest text-slate-500">Engaged With</p>
-          </div>
+        <div className={`flex items-center justify-center p-3 rounded-2xl border transition-all mb-5 ${isPinned ? 'bg-indigo-500/5 border-indigo-500/10' : isDark ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
+          {!isAuthorityNode ? (
+            <div className="grid grid-cols-2 gap-3 w-full">
+              <div className="text-center border-r border-slate-200 dark:border-slate-800">
+                <p className="text-sm font-black text-indigo-500">{stats.followers}</p>
+                <p className="text-[7px] font-black uppercase tracking-widest text-slate-500">Engaged By</p>
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-black text-indigo-500">{stats.following}</p>
+                <p className="text-[7px] font-black uppercase tracking-widest text-slate-500">Engaged With</p>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center w-full">
+              <p className="text-sm font-black text-indigo-500">{stats.followers}</p>
+              <p className="text-[7px] font-black uppercase tracking-widest text-slate-500">Engaged By</p>
+            </div>
+          )}
         </div>
 
         <div className="mb-5 flex items-center justify-between px-2">

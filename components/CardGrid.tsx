@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '../App';
 import UserCard from './UserCard';
 import { Card, UserRole } from '../types';
@@ -12,6 +12,7 @@ interface CardGridProps {
 
 const CardGrid: React.FC<CardGridProps> = ({ folderId, onEditCard }) => {
   const { cards, searchQuery, currentUser, instructions, theme, folders } = useApp();
+  const [expandedPinnedIds, setExpandedPinnedIds] = useState<Set<string>>(new Set());
   const isDark = theme === 'dark';
 
   const folderCards = useMemo(() => {
@@ -57,6 +58,13 @@ const CardGrid: React.FC<CardGridProps> = ({ folderId, onEditCard }) => {
       regularCards: sorted.filter(c => !c.is_pinned)
     };
   }, [folderCards, searchQuery, currentUser?.id]);
+
+  const togglePinned = (id: string) => {
+    const newSet = new Set(expandedPinnedIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setExpandedPinnedIds(newSet);
+  };
 
   const renderInstructionContent = (text: any) => {
     let contentStr = "";
@@ -119,27 +127,83 @@ const CardGrid: React.FC<CardGridProps> = ({ folderId, onEditCard }) => {
         </div>
       )}
 
-      {/* Priority Section */}
+      {/* Priority Section - Now Toggleable */}
       {pinnedCards.length > 0 && (
         <div className="space-y-6">
-          <div className="flex items-center gap-4 px-2">
+          <div className="flex items-center gap-4 px-2 mb-8">
             <div className="h-px flex-1 bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent" />
             <h4 className="text-[10px] font-black uppercase tracking-[0.4em] text-indigo-500 flex items-center gap-2">
               <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
-              Priority Nodes
+              Priority Updates
             </h4>
             <div className="h-px flex-1 bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent" />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-8 lg:gap-10">
-            {pinnedCards.map(card => (
-              <UserCard key={card.id} card={card} onEdit={() => onEditCard(card)} />
-            ))}
+
+          <div className="grid grid-cols-1 gap-6">
+            {pinnedCards.map(card => {
+              const isExpanded = expandedPinnedIds.has(card.id);
+              const isAdminCard = card.creator_role === UserRole.ADMIN || card.creator_role === UserRole.DEV;
+
+              return (
+                <div key={card.id} className="w-full max-w-xl mx-auto space-y-4 animate-in slide-in-from-top-4 duration-500">
+                  {/* Toggle Button / Marker */}
+                  <button
+                    onClick={() => togglePinned(card.id)}
+                    className={`group w-full flex items-center justify-between p-5 rounded-[2rem] border-2 transition-all duration-300 shadow-xl overflow-hidden relative ${
+                      isExpanded 
+                        ? 'bg-indigo-600 border-indigo-400 text-white' 
+                        : isDark ? 'bg-slate-900 border-slate-800 text-indigo-400' : 'bg-white border-indigo-100 text-indigo-600'
+                    }`}
+                  >
+                    {isExpanded && <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent animate-pulse pointer-events-none" />}
+                    
+                    <div className="flex items-center gap-4 relative z-10">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                        isExpanded ? 'bg-white text-indigo-600 rotate-12' : 'bg-indigo-600 text-white'
+                      }`}>
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d={isExpanded ? "M19 9l-7 7-7-7" : "M5 15l7-7 7 7"} />
+                        </svg>
+                      </div>
+                      <div className="text-left">
+                        <div className="flex items-center gap-2">
+                           <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${isExpanded ? 'text-white/70' : 'text-slate-500'}`}>
+                             {isAdminCard ? "Update from the admin" : "Pinned Priority"}
+                           </span>
+                           <span className="flex h-1.5 w-1.5 relative">
+                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+                           </span>
+                        </div>
+                        <h5 className={`font-black text-sm lg:text-base leading-none mt-1 ${isExpanded ? 'text-white' : isDark ? 'text-white' : 'text-slate-900'}`}>
+                          {card.display_name}
+                        </h5>
+                      </div>
+                    </div>
+
+                    <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-opacity ${isExpanded ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'}`}>
+                      {isExpanded ? 'Close Update' : 'View Update'}
+                      <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </button>
+
+                  {/* Expanded Card Content */}
+                  {isExpanded && (
+                    <div className="animate-in fade-in zoom-in-95 slide-in-from-top-4 duration-500 origin-top">
+                      <UserCard card={card} onEdit={() => onEditCard(card)} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
       {/* Profile Grid */}
-      <div className="space-y-6">
+      <div className="space-y-6 pt-10">
         {(pinnedCards.length > 0 && regularCards.length > 0) && (
            <div className="flex items-center gap-4 px-2">
             <h4 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500">Active Feed</h4>
